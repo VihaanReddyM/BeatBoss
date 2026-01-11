@@ -1,0 +1,8 @@
+flet>=0.21.0
+python-vlc
+requests
+winrt-Windows-Media
+winrt-Windows-Storage-Streams
+winrt-Windows-Foundation
+colorama
+python-dotenv
