@@ -7,6 +7,7 @@ For API documentation, refer to: [DAB API Docs](https://github.com/sixnine-dotde
 
 ## Features
 *   Streaming from public sources
+*   Youtube Playlist Import
 *   Local playback and management
 *   Dark/Light theme support
 
