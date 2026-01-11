@@ -8,12 +8,14 @@ For API documentation, refer to: [DAB API Docs](https://github.com/sixnine-dotde
 ## Features
 *   Streaming from public sources
 *   Local playback and management
-*   Auto-scrolling lyrics
 *   Dark/Light theme support
 
 ## Prerequisites
 
-Before running the application, ensure you have the following installed:
+The application is primarily designed for Windows, but can also be built for Linux.
+
+*   [Windows Setup Guide](#installation) (Default)
+*   [Linux Build Guide](LINUX_BUILD.md) (Experimental)
 
 1.  **Python 3.10+**
 2.  **VLC Media Player** (Required for audio playback engine)
