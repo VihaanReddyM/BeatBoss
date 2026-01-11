@@ -16,20 +16,11 @@ from download_manager import DownloadManager
 from windows_media import WindowsMediaControls
 from dotenv import load_dotenv
 
-# Load environment variables
-import sys
-if getattr(sys, 'frozen', False):
-    # Look for .env in the same folder as the .exe
-    base_path = os.path.dirname(sys.executable)
-    env_path = os.path.join(base_path, '.env')
-    load_dotenv(env_path)
-else:
-    load_dotenv()
-
-YT_API_KEY = os.getenv("YT_API_KEY")
+# Hardcoded YouTube API Key for Build (NOT for Git)
+YT_API_KEY = "youtube api key here"
 
 if not YT_API_KEY or "AIza" not in YT_API_KEY:
-    print("WARNING: YouTube API Key not found or invalid! (Check .env file)")
+    print("WARNING: YouTube API Key not found or invalid!")
 
 # Performance Optimization Utilities
 def debounce(wait_ms=300):

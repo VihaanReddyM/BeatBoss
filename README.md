@@ -48,11 +48,12 @@ The application is primarily designed for Windows, but can also be built for Lin
 
 This application requires a YouTube Data API v3 key to function.
 
-### 1. Formatting the Environment File
-Create a file named `.env` in the root directory and add your API key:
+### 1. Add Your API Key
 
-```ini
-YT_API_KEY=your_api_key_here
+Open `main_build.py` and replace the placeholder with your actual API key on line 18:
+
+```python
+YT_API_KEY = "your_actual_api_key_here"
 ```
 
 ### 2. Obtaining a YouTube Data API Key
@@ -61,15 +62,17 @@ YT_API_KEY=your_api_key_here
 3.  Navigate to **APIs & Services** > **Library**.
 4.  Search for "YouTube Data API v3" and enable it.
 5.  Go to **Credentials** > **Create Credentials** > **API Key**.
-6.  Copy the generated key and paste it into your `.env` file.
+6.  Copy the generated key and paste it into `main_build.py`.
 
 ## Running the Application
 
 Once setup is complete, run the player with:
 
 ```bash
-python main_flet.py
+python main_build.py
 ```
+
+**Note**: For development with `.env` file, you can use `main_flet.py` which loads the API key from environment variables.
 
 ## Legal Disclaimer
 
