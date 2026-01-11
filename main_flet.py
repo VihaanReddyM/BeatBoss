@@ -112,9 +112,10 @@ class DabFletApp:
         self.debug_logs = [] # List of log strings
         self.art_semaphore = threading.Semaphore(2) 
         self.shuffle_enabled = False
+        self.loop_mode = "off"  # off, loop_one, loop_all
         self.original_queue = []
-        self.recent_searches = []  # Track last 5 searches
-        self.play_history = []  # Track last 5 played tracks
+        self.recent_searches = self.settings.get_recent_searches()  # Load from settings
+        self.play_history = self.settings.get_play_history()  # Load from settings
         self.current_view = "home"  # Track current view for toggle behavior
         self.last_search_results = []  # Cache search results for refresh
         
@@ -187,24 +188,39 @@ class DabFletApp:
 
     def _update_loop(self):
         while self.running:
-            if self.player.is_playing:
-                cur = self.player.get_time()
-                dur = self.player.get_length()
-                if dur > 0:
-                    prog = (cur / dur) * 1000
-                    def _sync():
-                        self.seek_slider.value = prog
-                        self.time_cur.value = self._format_ms(cur)
-                        self.time_end.value = self._format_ms(dur)
-                        self._sync_lyrics(cur)
-                        # Batch update only these controls
+            try:
+                # SAFETY: Check if session still exists before updating UI
+                if not hasattr(self, 'page') or self.page is None:
+                    break
+                
+                if self.player.is_playing:
+                    cur = self.player.get_time()
+                    dur = self.player.get_length()
+                    if dur > 0:
+                        prog = (cur / dur) * 1000
+                        def _sync():
+                            try:
+                                self.seek_slider.value = prog
+                                self.time_cur.value = self._format_ms(cur)
+                                self.time_end.value = self._format_ms(dur)
+                                self._sync_lyrics(cur)
+                                # Batch update only these controls
+                                self.seek_slider.update()
+                                self.time_cur.update()
+                                self.time_end.update()
+                            except:
+                                pass
+                        
+                        # SAFETY: Check session before calling run_thread
                         try:
-                            self.seek_slider.update()
-                            self.time_cur.update()
-                            self.time_end.update()
-                        except:
-                            pass
-                    self.page.run_thread(_sync)
+                            if hasattr(self.page, 'session') and self.page.session:
+                                self.page.run_thread(_sync)
+                        except (RuntimeError, AttributeError):
+                            # Session destroyed, stop the loop
+                            break
+            except Exception as e:
+                print(f"Update loop error: {e}")
+                # Continue running even if one iteration fails
             
             # Much slower updates for better performance (was 0.3-0.8s, now 1s)
             time.sleep(1.0)
@@ -222,36 +238,90 @@ class DabFletApp:
         if idx != self.current_lyric_idx and idx != -1:
             self.current_lyric_idx = idx
             def _update_ui():
-                # Highlight lyric in UI
+                # Highlight lyric in UI (ALWAYS do this first)
                 if hasattr(self, 'lyrics_scroll') and self.lyrics_scroll and self.lyrics_scroll.controls:
                     for i, lyric_row in enumerate(self.lyrics_scroll.controls):
-                        if i == idx:
-                            active_color = ft.Colors.GREEN_700 if self.current_theme == "light" else ft.Colors.GREEN
-                            lyric_row.content.color = active_color
-                            lyric_row.content.size = 28
-                            lyric_row.content.weight = "bold"
-                        else:
-                            lyric_row.content.color = self._get_secondary_color()
-                            lyric_row.content.size = 22
-                            lyric_row.content.weight = "normal"
+                        try:
+                            if i == idx:
+                                active_color = ft.Colors.GREEN_700 if self.current_theme == "light" else ft.Colors.GREEN
+                                lyric_row.content.color = active_color
+                                lyric_row.content.size = 28
+                                lyric_row.content.weight = "bold"
+                            else:
+                                lyric_row.content.color = self._get_secondary_color()
+                                lyric_row.content.size = 22
+                                lyric_row.content.weight = "normal"
+                        except:
+                            pass  # Continue even if one lyric fails
+                    
+                    # WINDOWED KARAOKE APPROACH: Show only a small window of lyrics
+                    # Like real karaoke: 2 before, current (3rd line), 3 after
                     try:
-                        self.lyrics_scroll.update()
-                        # Compatibility: manual offset scrolling (async)
-                        scroll_offset = max(0, (idx * 60) - 100)
+                        # Define window size (3rd line centered)
+                        lines_before = 2  # Changed from 3 to center on 3rd line
+                        lines_after = 3
                         
-                        async def _scroll():
-                            try:
-                                await self.lyrics_scroll.scroll_to(offset=scroll_offset, duration=300)
-                            except: pass
-
-                        if hasattr(self.page, "run_task"):
-                            self.page.run_task(_scroll)
+                        # Calculate window range
+                        start_idx = max(0, idx - lines_before)
+                        end_idx = min(len(self.lyrics_data), idx + lines_after + 1)
+                        
+                        # Only rebuild if window changed (smoother transitions)
+                        current_window = (start_idx, end_idx)
+                        if not hasattr(self, '_last_lyrics_window') or self._last_lyrics_window != current_window:
+                            self._last_lyrics_window = current_window
+                            
+                            # Clear and rebuild with just visible window
+                            self.lyrics_scroll.controls.clear()
+                            
+                            # Show only the visible window (no top padding)
+                            for i in range(start_idx, end_idx):
+                                _, text = self.lyrics_data[i]
+                                
+                                # Determine color and size
+                                if i == idx:
+                                    color = ft.Colors.GREEN_700 if self.current_theme == "light" else ft.Colors.GREEN
+                                    size = 28
+                                    weight = "bold"
+                                else:
+                                    color = self._get_secondary_color()
+                                    size = 22
+                                    weight = "normal"
+                                
+                                lyric_container = ft.Container(
+                                    content=ft.Text(
+                                        text, 
+                                        size=size, 
+                                        color=color, 
+                                        weight=weight,
+                                        text_align=ft.TextAlign.CENTER
+                                    ),
+                                    padding=ft.Padding(top=15, bottom=15, left=20, right=20),
+                                )
+                                self.lyrics_scroll.controls.append(lyric_container)
                         else:
-                            # Fallback if run_task missing (rare)
-                            pass
+                            # Window same, just update colors (much faster, smoother)
+                            for i, lyric_row in enumerate(self.lyrics_scroll.controls):
+                                actual_idx = start_idx + i
+                                if actual_idx == idx:
+                                    lyric_row.content.color = ft.Colors.GREEN_700 if self.current_theme == "light" else ft.Colors.GREEN
+                                    lyric_row.content.size = 28
+                                    lyric_row.content.weight = "bold"
+                                else:
+                                    lyric_row.content.color = self._get_secondary_color()
+                                    lyric_row.content.size = 22
+                                    lyric_row.content.weight = "normal"
+                        
+                        self.lyrics_scroll.update()
+                                
                     except Exception as e:
-                        print(f"Scroll error: {e}")
-            self.page.run_thread(_update_ui)
+                        print(f"Windowed lyrics error: {e}")
+            
+            # SAFETY: Check session before updating
+            try:
+                if hasattr(self, 'page') and hasattr(self.page, 'session') and self.page.session:
+                    self.page.run_thread(_update_ui)
+            except (RuntimeError, AttributeError):
+                pass  # Session destroyed, skip update
 
     def _format_ms(self, ms):
         s = int(ms / 1000)
@@ -370,7 +440,7 @@ class DabFletApp:
         
         self.play_btn = ft.IconButton(ft.Icons.PLAY_CIRCLE_FILLED, icon_size=48, icon_color=ft.Colors.WHITE, on_click=lambda _: self._toggle_playback())
         self.shuffle_btn = ft.IconButton(ft.Icons.SHUFFLE, icon_size=18, icon_color=ft.Colors.WHITE_30, on_click=lambda _: self._toggle_shuffle())
-        self.repeat_btn = ft.IconButton(ft.Icons.REPEAT, icon_size=18, icon_color=ft.Colors.WHITE_30)
+        self.repeat_btn = ft.IconButton(ft.Icons.REPEAT, icon_size=18, icon_color=ft.Colors.WHITE_30, on_click=lambda _: self._toggle_loop())
         
         # Audio Quality Info (Hi-Res)
         self.audio_quality_info = ft.Text("", size=10, color=ft.Colors.GREEN_400, weight="bold")
@@ -685,6 +755,7 @@ class DabFletApp:
         if q not in self.recent_searches:
             self.recent_searches.insert(0, q)
             self.recent_searches = self.recent_searches[:5]
+            self.settings.set_recent_searches(self.recent_searches)  # Persist immediately
         
         self.viewport.controls.clear()
         self.viewport.controls.append(ft.Text(f"Results for '{q}'", size=24, weight="bold"))
@@ -872,7 +943,7 @@ class DabFletApp:
         """OPTIMIZED: Throttled hover handler for track rows"""
         now = time.time()
         if not hasattr(self, '_last_track_hover'):
-            self.last_track_hover = 0
+            self._last_track_hover = 0
         
         # PERFORMANCE: Skip if hovering too frequently (100ms throttle)
         if now - self._last_track_hover < 0.1:
@@ -1004,6 +1075,7 @@ class DabFletApp:
                 if track not in self.play_history:
                     self.play_history.insert(0, track)
                     self.play_history = self.play_history[:5]
+                    self.settings.set_play_history(self.play_history)  # Persist immediately
                 
                 def _sync():
                     try:
@@ -1106,7 +1178,7 @@ class DabFletApp:
             self.lyrics_scroll = ft.ListView(
                 spacing=20,
                 expand=True,
-                padding=ft.Padding(0, 100, 0, 100) # Add padding for better scroll experience
+                padding=ft.Padding(0, 0, 0, 0)  # Remove all padding
             )
             
             if not self.lyrics_data or len(self.lyrics_data) == 0:
@@ -1133,7 +1205,7 @@ class DabFletApp:
             self.viewport.controls.append(
                 ft.Container(
                     expand=True,
-                    padding=ft.Padding(0, 100, 0, 0),
+                    padding=ft.Padding(0, -50, 0, 0),  # -50px to shift up
                     content=self.lyrics_scroll,
                     alignment=ft.Alignment(0, 0)
                 )
@@ -1239,12 +1311,68 @@ class DabFletApp:
         else:
             if self.original_queue:
                 self.queue = list(self.original_queue)
-            self.shuffle_btn.icon_color = ft.Colors.WHITE_30
-        self.page.update()
+            # Use theme-aware color for inactive state
+            self.shuffle_btn.icon_color = self._get_secondary_color()
+        try:
+            self.shuffle_btn.update()
+        except:
+            self.page.update()
+    
+    def _toggle_loop(self):
+        """Cycle through loop modes: off -> loop_all -> loop_one -> off"""
+        if self.loop_mode == "off":
+            self.loop_mode = "loop_all"
+            self.repeat_btn.icon = ft.Icons.REPEAT
+            self.repeat_btn.icon_color = ft.Colors.GREEN
+        elif self.loop_mode == "loop_all":
+            self.loop_mode = "loop_one"
+            self.repeat_btn.icon = ft.Icons.REPEAT_ONE
+            self.repeat_btn.icon_color = ft.Colors.GREEN
+        else:  # loop_one
+            self.loop_mode = "off"
+            self.repeat_btn.icon = ft.Icons.REPEAT
+            # Use theme-aware color for inactive state
+            self.repeat_btn.icon_color = self._get_secondary_color()
+        
+        try:
+            self.repeat_btn.update()
+        except:
+            self.page.update()
 
     def _next_track(self):
-        if self.current_track_index < len(self.queue) - 1:
-            self.current_track_index += 1
+        """Enhanced next track with shuffle and loop support"""
+        import random
+        
+        # Loop one: replay current track
+        if self.loop_mode == "loop_one" and 0 <= self.current_track_index < len(self.queue):
+            self._play_track(self.queue[self.current_track_index])
+            return
+        
+        # Remove current track from queue if shuffle is enabled
+        if self.shuffle_enabled and 0 <= self.current_track_index < len(self.queue):
+            self.queue.pop(self.current_track_index)
+            # Adjust index after removal
+            if self.current_track_index >= len(self.queue):
+                self.current_track_index = max(0, len(self.queue) - 1)
+            
+            # If queue is empty and loop_all, restore from original
+            if len(self.queue) == 0 and self.loop_mode == "loop_all" and self.original_queue:
+                self.queue = list(self.original_queue)
+                random.shuffle(self.queue)
+                self.current_track_index = 0
+        else:
+            # Normal sequential playback
+            if self.current_track_index < len(self.queue) - 1:
+                self.current_track_index += 1
+            elif self.loop_mode == "loop_all":
+                # Loop back to start
+                self.current_track_index = 0
+            else:
+                # End of queue, no loop
+                return
+        
+        # Play next track
+        if 0 <= self.current_track_index < len(self.queue):
             self._play_track(self.queue[self.current_track_index])
 
     def _add_to_queue(self, track):

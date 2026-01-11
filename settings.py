@@ -180,3 +180,19 @@ class Settings:
         if "auth" in self.settings:
             del self.settings["auth"]
             self.save()
+    
+    def get_recent_searches(self) -> list:
+        """Get recent searches (last 5)"""
+        return self.settings.get("recent_searches", [])
+    
+    def set_recent_searches(self, searches: list):
+        """Save recent searches (max 5)"""
+        self.set("recent_searches", searches[:5])
+    
+    def get_play_history(self) -> list:
+        """Get play history (last 5)"""
+        return self.settings.get("play_history", [])
+    
+    def set_play_history(self, history: list):
+        """Save play history (max 5)"""
+        self.set("play_history", history[:5])
