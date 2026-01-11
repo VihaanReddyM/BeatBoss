@@ -1,4 +1,5 @@
 # Python
+# requirements.txt is usually NOT ignored, checking if *.txt is ignoring it
 __pycache__/
 *.py[cod]
 *$py.class
@@ -44,3 +45,17 @@ Output/
 
 # User Data
 beatboss_settings.json
+
+# Residuals / Notes
+prototype_flet.py
+test_yt.py
+settings_ui_code.py
+beatboss_installer_copy.iss
+*.txt
+!requirements.txt
+!license.txt
+
+# Build Configs (Excluded by request)
+*.spec
+*.iss
+version_info.txt

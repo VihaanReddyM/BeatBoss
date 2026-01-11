@@ -1,8 +1,8 @@
 flet>=0.21.0
 python-vlc
 requests
-winrt-Windows-Media
-winrt-Windows-Storage-Streams
-winrt-Windows-Foundation
+winrt-Windows-Media; sys_platform == 'win32'
+winrt-Windows-Storage-Streams; sys_platform == 'win32'
+winrt-Windows-Foundation; sys_platform == 'win32'
 colorama
 python-dotenv
