@@ -72,8 +72,6 @@ Once setup is complete, run the player with:
 python main_build.py
 ```
 
-**Note**: For development with `.env` file, you can use `main_flet.py` which loads the API key from environment variables.
-
 ## Legal Disclaimer
 
 This application (BeatBoss) does not host, store, or distribute any music files or copyrighted content. It functions solely as a client-side player that streams content available publicly on the internet. All rights regarding audio content belong to their respective owners.
