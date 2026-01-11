@@ -2511,4 +2511,4 @@ def main(page: ft.Page):
     DabFletApp(page)
 
 if __name__ == "__main__":
-    ft.app(main, assets_dir="assets", web_renderer="html")
+    ft.app(target=main, assets_dir="assets")
