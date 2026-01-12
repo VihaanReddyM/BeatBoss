@@ -133,6 +133,7 @@ class DabFletApp:
         # Performance: Click guards and debouncing state
         self._view_switching = False
         self._last_view_switch = 0
+        self._search_focused = False # Manual focus tracker for keyboard shortcuts
         self._pending_updates = set()  # Track which controls need updates
         self._update_batch_timer = None
         
@@ -400,7 +401,9 @@ class DabFletApp:
             height=45,
             content_padding=10,
             expand=True,
-            on_submit=lambda e: self.page.run_thread(self._handle_search)
+            on_submit=lambda e: self.page.run_thread(self._handle_search),
+            on_focus=lambda _: setattr(self, "_search_focused", True),
+            on_blur=lambda _: setattr(self, "_search_focused", False)
         )
 
         self.viewport = ft.Column(expand=True, scroll=ft.ScrollMode.ADAPTIVE)
@@ -2671,15 +2674,19 @@ class DabFletApp:
 
     def _on_keyboard(self, e: ft.KeyboardEvent):
         """Handle keyboard shortcuts - ignore if typing in text field"""
-        # Check if user is typing in a text field
+        # PERFORMANCE: Check for manual focus flags first
+        if getattr(self, "_search_focused", False):
+            return
+
+        # Fallback for other text fields (Import, Create Library dialogs)
         try:
-            if hasattr(self.page, 'focused_control') and self.page.focused_control:
-                focused = self.page.focused_control
-                # Don't handle shortcuts if focused on TextField
-                if isinstance(focused, ft.TextField):
+            focused = self.page.focused_control
+            if focused and (isinstance(focused, ft.TextField) or hasattr(focused, "value")):
+                # Check if it has a focus property that is actually true
+                if getattr(focused, "focused", False):
                     return
         except:
-            pass  # If check fails, allow shortcuts
+            pass
         
         if e.key == "Space" or e.key == " ":
             self._toggle_playback()
