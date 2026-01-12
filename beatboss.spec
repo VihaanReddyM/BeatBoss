@@ -2,13 +2,26 @@
 
 block_cipher = None
 
-# Custom helper to find ffmpeg
+# Custom helper to find ffmpeg and DLLs
 import os
+import glob
+
 ffmpeg_files = []
+
+# Find ffmpeg.exe
 if os.path.exists("ffmpeg.exe"):
     ffmpeg_files.append(("ffmpeg.exe", "."))
-if os.path.exists("ffprobe.exe"):
-    ffmpeg_files.append(("ffprobe.exe", "."))
+
+# Find all FFmpeg DLL files
+for dll in glob.glob("av*.dll") + glob.glob("sw*.dll") + glob.glob("postproc*.dll"):
+    if os.path.exists(dll):
+        ffmpeg_files.append((dll, "."))
+    else:
+        print(f"Warning: Redundant match for {dll}")
+
+# Ensure ffmpeg.exe is included
+if not any(f[0] == "ffmpeg.exe" for f in ffmpeg_files) and os.path.exists("ffmpeg.exe"):
+    ffmpeg_files.append(("ffmpeg.exe", "."))
 
 a = Analysis(
     ['main_build.py'],
@@ -31,6 +44,13 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
+# Add VLC bundle if it exists
+vlc_tree = []
+if os.path.exists('vlc'):
+    vlc_tree = Tree('vlc', prefix='vlc')
+    print("Found VLC folder - will be bundled with executable")
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
@@ -57,6 +77,7 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
+    vlc_tree,  # Include bundled VLC folder
     strip=False,
     upx=False,
     upx_exclude=[],

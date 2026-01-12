@@ -279,7 +279,30 @@ class DabAPI:
             self._log("GET", url, response.status_code, response.text)
             if response.status_code == 200:
                 data = response.json()
-                return data.get("favorites", [])
+                favorites = data.get("favorites", [])
+                return [self._normalize_track(t) for t in favorites]
         except Exception as e:
             self._log("ERROR", url, 0, str(e))
         return []
+
+    def add_favorite(self, track_data):
+        url = f"{self.BASE_URL}/favorites"
+        payload = {"track": track_data}
+        try:
+            response = self.session.post(url, json=payload, timeout=5)
+            self._log("POST", url, response.status_code, response.text)
+            return response.status_code in [200, 201]
+        except Exception as e:
+            self._log("ERROR", url, 0, str(e))
+            return False
+
+    def remove_favorite(self, track_id):
+        url = f"{self.BASE_URL}/favorites"
+        params = {"trackId": track_id}
+        try:
+            response = self.session.delete(url, params=params, timeout=5)
+            self._log("DELETE", url, response.status_code, response.text)
+            return response.status_code == 200
+        except Exception as e:
+            self._log("ERROR", url, 0, str(e))
+            return False

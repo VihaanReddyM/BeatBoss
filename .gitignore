@@ -56,6 +56,13 @@ beatboss_installer_copy.iss
 !requirements.txt
 !license.txt
 
+# Test files - not committed
+#main_test_flet.py
+#player_flet.py
+
+# Bundled VLC (large binary files, download separately)
+vlc/
+
 # Build Configs (Excluded by request)
 # *.spec
 # *.iss

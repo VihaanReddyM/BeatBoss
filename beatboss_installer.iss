@@ -15,6 +15,12 @@ SetupIconFile=assets\icon.ico
 ; Prevent duplicate installs
 DisableProgramGroupPage=yes
 LicenseFile=license.txt
+AppSupportURL=https://github.com/TheVolecitor/BeatBoss
+AppUpdatesURL=https://github.com/TheVolecitor/BeatBoss/releases
+VersionInfoVersion=1.0.0.0
+VersionInfoCompany=BeatBoss Team
+VersionInfoDescription=BeatBoss Desktop Player
+VersionInfoCopyright=Copyright (C) 2026 BeatBoss Team
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -45,27 +51,4 @@ Filename: "{app}\BeatBoss.exe"; Description: "{cm:LaunchProgram,BeatBoss}"; Flag
 Name: "{userappdata}\BeatBoss"
 
 [Code]
-function InitializeSetup(): Boolean;
-var
-  ErrCode: Integer;
-begin
-  Result := True;
-  // Check for VLC 32-bit and 64-bit registry keys
-  if not RegKeyExists(HKEY_LOCAL_MACHINE, 'SOFTWARE\VideoLAN\VLC') and
-     not RegKeyExists(HKEY_LOCAL_MACHINE, 'SOFTWARE\WOW6432Node\VideoLAN\VLC') then
-  begin
-    if MsgBox('BeatBoss requires VLC Media Player, which was not detected.' + #13#10 +
-              'Do you want to download and install it now?', mbConfirmation, MB_YESNO) = idYes then
-    begin
-      // Open VLC download page
-      ShellExec('open', 'https://www.videolan.org/vlc/', '', '', SW_SHOW, ewNoWait, ErrCode);
-      MsgBox('Please install VLC and then run this setup again.', mbInformation, MB_OK);
-      Result := False; // Abort installation
-    end
-    else
-    begin
-      if MsgBox('The app may not play audio without VLC. Continue anyway?', mbConfirmation, MB_YESNO) = idNo then
-        Result := False;
-    end;
-  end;
-end;
+// VLC is now bundled with the application, no separate installation needed!

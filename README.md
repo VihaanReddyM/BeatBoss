@@ -27,12 +27,30 @@ The application is primarily designed for Windows, but can also be built for Lin
 *   [Windows Setup Guide](#installation) (Default)
 *   [Linux Build Guide](LINUX_BUILD.md) (Experimental)
 
+### For End Users (Using Installer)
+**No prerequisites needed!** The installer includes everything:
+- ✅ VLC Media Player (bundled)
+- ✅ FFmpeg (bundled)
+- ✅ All required libraries
+
+Just download and install!
+
+### For Developers (Building from Source)
+
+To build the executable and bundle dependencies correctly, follow these steps:
+
 1.  **Python 3.10+**
-2.  **VLC Media Player** (Required for audio playback engine)
-    *   Ensure the architecture matches your Python install (x64 recommended).
-3.  **FFmpeg** (Required for format conversion)
-    *   Download from [ffmpeg.org](https://ffmpeg.org/download.html).
-    *   Extract `ffmpeg.exe` and `ffprobe.exe` and place them in the project root folder.
+2.  **VLC Portable (win64)**
+    *   Download: [vlc-3.0.21-win64.zip](https://get.videolan.org/vlc/3.0.21/win64/vlc-3.0.21-win64.zip)
+    *   Extract and rename the folder to `vlc` in the project root.
+    *   Structure should be: `vlc/vlc.exe`, `vlc/plugins/`, etc.
+3.  **FFmpeg (Essential for Local Playback)**
+    *   Download: [ffmpeg-master-latest-win64-gpl.zip](https://github.com/BtbN/FFmpeg-Builds/releases)
+    *   Copy `ffmpeg.exe` and all `.dll` files from the `bin/` folder to the project root.
+    *   Required DLLs include: `avcodec-*.dll`, `avformat-*.dll`, `avutil-*.dll`, `swresample-*.dll`, `swscale-*.dll`.
+
+> [!IMPORTANT]
+> The bundling script (`beatboss.spec`) looks for these files in the root directory. If they are missing, the EXE will build but local playback will fail.
 
 ## Installation
 

@@ -1,14 +1,33 @@
 """
 Audio player using VLC with ffmpeg for local files
 Uses temporary file approach for Windows compatibility
+Supports bundled VLC portable for easy deployment
 """
+
+import os
+import sys
+
+# Setup bundled VLC path
+def _setup_vlc_path():
+    """Configure VLC path to use bundled version if available"""
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    bundled_vlc = os.path.join(app_dir, 'vlc')
+    
+    if os.path.exists(bundled_vlc):
+        os.environ['PATH'] = bundled_vlc + os.pathsep + os.environ.get('PATH', '')
+        print(f"[VLC] Using bundled VLC: {bundled_vlc}")
+        return bundled_vlc
+    else:
+        print("[VLC] Using system VLC")
+        return None
+
+_setup_vlc_path()
 
 import vlc
 import time
 import threading
 import subprocess
 import tempfile
-import os
 
 class AudioPlayer:
     def __init__(self):

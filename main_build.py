@@ -128,7 +128,7 @@ class DabFletApp:
         # Performance Optimization: Thread Pools
         self.thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="worker")
         self.image_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="image")
-        self.active_futures = []  # Track futures to cancel on view change
+        self.active_futures = set()  # Track futures to cancel on view change
         
         # Performance: Click guards and debouncing state
         self._view_switching = False
@@ -376,7 +376,7 @@ class DabFletApp:
             self._nav_item(ft.Icons.LIBRARY_MUSIC, "Library", self._show_library),
             ft.Divider(height=40),
             self._nav_item(ft.Icons.ADD_BOX, "Create Library", self._open_create_lib),
-            self._nav_item(ft.Icons.FAVORITE, "Favorites", self._show_favorites),
+            self._nav_item(ft.Icons.FAVORITE, "Liked Songs", self._show_favorites),
             self._nav_item(ft.Icons.SETTINGS, "Settings", self._show_settings),
             ft.Container(height=20),
             self._nav_item(ft.Icons.LOGOUT, "Sign Out", self._handle_logout, color=ft.Colors.RED_400),
@@ -510,40 +510,28 @@ class DabFletApp:
         self._update_player_bar_theme()
 
     def _nav_item(self, icon, text, cmd, selected=False, color=None):
-        # We'll use a local reference to determine color
-        is_selected = selected
-        
         def _on_click(e):
-            # PERFORMANCE: Guard against rapid successive clicks
-            now = time.time()
-            if now - self._last_view_switch < 0.2:  # 200ms guard
-                return
-            self._last_view_switch = now
+            def _nav():
+                # Update all nav items to unselected
+                for item in self.sidebar_content.controls:
+                    if isinstance(item, ft.Container) and hasattr(item, "data"):
+                        if item.data == "nav":
+                            item.content.controls[0].color = None
+                            item.content.controls[1].color = None
+                            item.bgcolor = ft.Colors.TRANSPARENT
+                
+                e.control.content.controls[0].color = ft.Colors.GREEN
+                e.control.content.controls[1].color = ft.Colors.GREEN
+                e.control.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.GREEN)
+                
+                try:
+                    e.control.update()
+                except:
+                    self.page.update()
+                
+                if cmd: cmd()
             
-            # PERFORMANCE: Cancel pending operations
-            self._cancel_pending_operations()
-            
-            # Update all nav items to unselected
-            for item in self.sidebar_content.controls:
-                if isinstance(item, ft.Container) and hasattr(item, "data"):
-                    if item.data == "nav":
-                        item.content.controls[0].color = None  # Let theme handle it
-                        item.content.controls[1].color = None  # Let theme handle it
-                        item.bgcolor = ft.Colors.TRANSPARENT
-            
-            e.control.content.controls[0].color = ft.Colors.GREEN
-            e.control.content.controls[1].color = ft.Colors.GREEN
-            e.control.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.GREEN)
-            
-            # PERFORMANCE: Use control.update() instead of page.update()
-            try:
-                e.control.update()
-            except:
-                self.page.update()
-            
-            if cmd: 
-                # Execute command in thread pool to avoid blocking
-                self.thread_pool.submit(cmd)
+            self._safe_navigate(_nav)
 
         item = ft.Container(
             data="nav",
@@ -559,11 +547,35 @@ class DabFletApp:
         )
         return item
 
+    def _add_future(self, future):
+        """Add a future to tracking and setup auto-removal on completion"""
+        self.active_futures.add(future)
+        future.add_done_callback(lambda f: self.active_futures.discard(f))
+
     def _cancel_pending_operations(self):
         """Cancel all pending futures from previous view"""
-        for future in self.active_futures:
-            future.cancel()
+        for future in list(self.active_futures):
+            if not future.done():
+                future.cancel()
         self.active_futures.clear()
+
+    def _safe_navigate(self, cmd):
+        """Standardized navigation wrapper with locking and cleanup"""
+        if self._view_switching:
+            return
+        
+        self._view_switching = True
+        self._cancel_pending_operations()
+        
+        def _task():
+            try:
+                cmd()
+            except Exception as e:
+                print(f"Navigation error: {e}")
+            finally:
+                self._view_switching = False
+                
+        self._add_future(self.thread_pool.submit(_task))
 
     def _on_nav_hover(self, e):
         # PERFORMANCE: Throttle hover events - only update every 100ms
@@ -762,6 +774,7 @@ class DabFletApp:
             rs = self.api.search(q, search_type="all") # "all" returns albums too
             
             def _update_res():
+                if self.current_view != "search": return
                 if rs:
                     # Display Albums Section
                     if rs.get("albums"):
@@ -783,8 +796,7 @@ class DabFletApp:
             self.page.run_thread(_update_res)
         
         # PERFORMANCE: Use thread pool instead of creating new thread
-        future = self.thread_pool.submit(_req)
-        self.active_futures.append(future)
+        self._add_future(self.thread_pool.submit(_req))
 
     def _display_albums(self, albums):
         row = ft.Row(scroll=ft.ScrollMode.HIDDEN, spacing=20)
@@ -892,10 +904,14 @@ class DabFletApp:
             )
 
             # Collection menu
+            is_fav_view = getattr(self, "current_view", "") == "favorites"
+            like_text = "Unlike" if is_fav_view else "Like"
+            like_click = self._unlike_track if is_fav_view else self._like_track
+            
             items=[
                 ft.PopupMenuItem(content=ft.Text("Add to Library"), on_click=lambda _, trk=t: self._add_to_lib_picker(trk)),
                 ft.PopupMenuItem(content=ft.Text("Add to Queue"), on_click=lambda _, trk=t: self._add_to_queue(trk)),
-                ft.PopupMenuItem(content=ft.Text("Like"), on_click=lambda _, trk=t: self._like_track(trk)),
+                ft.PopupMenuItem(content=ft.Text(like_text), on_click=lambda _, trk=t: like_click(trk)),
             ]
             
             # If we are in a library view, add "Remove from Library"
@@ -993,9 +1009,8 @@ class DabFletApp:
             except:
                 pass
         
-        # PERFORMANCE: Submit to image pool (max 5 concurrent) instead of creating unlimited threads
-        future = self.image_pool.submit(_task)
-        self.active_futures.append(future)
+        # PERFORMANCE: Submit to image pool (max 5 concurrent) instead of creating tracked futures
+        self._add_future(self.image_pool.submit(_task))
     
     def _play_track_from_list(self, tracks, index):
         """Play a single track - only add that track to queue"""
@@ -1059,11 +1074,7 @@ class DabFletApp:
                     print(f"[Stream Playback] Streaming track {track_id}")
                     url = self.api.get_stream_url(track_id)
                     if not url:
-                        def _error():
-                            self.page.snack_bar = ft.SnackBar(ft.Text("Failed to get stream URL. This track might be unavailable."))
-                            self.page.snack_bar.open = True
-                            self.page.update()
-                        self.page.run_thread(_error)
+                        self._show_banner("Failed to get stream URL. This track might be unavailable.", ft.Colors.RED_400)
                         return
 
                 self.player.play_url(url, track)
@@ -1109,8 +1120,7 @@ class DabFletApp:
                         
                         # Fetch lyrics - use thread pool
                         self.fetching_lyrics = True
-                        future = self.thread_pool.submit(self._fetch_lyrics, track)
-                        self.active_futures.append(future)
+                        self._add_future(self.thread_pool.submit(self._fetch_lyrics, track))
                         
                         self.page.update()
                     except Exception as e:
@@ -1118,16 +1128,11 @@ class DabFletApp:
                 
                 self.page.run_thread(_sync)
             except Exception as e:
-                def _error():
-                    self.page.snack_bar = ft.SnackBar(ft.Text(f"Playback Error: {str(e)}"))
-                    self.page.snack_bar.open = True
-                    self.page.update()
-                self.page.run_thread(_error)
+                self._show_banner(f"Playback Error: {str(e)}", ft.Colors.RED_400)
                 print(f"Playback task error: {e}")
                 
         # PERFORMANCE: Use thread pool instead of creating new thread
-        future = self.thread_pool.submit(_task)
-        self.active_futures.append(future)
+        self._add_future(self.thread_pool.submit(_task))
 
     def _parse_lrc(self, lrc_text):
         import re
@@ -1382,9 +1387,9 @@ class DabFletApp:
         except Exception as e:
             print(f"Add to queue error: {e}")
 
-    def _show_queue(self):
+    def _show_queue(self, force=False):
         # Toggle behavior: if already showing queue, go back to home
-        if self.current_view == "queue":
+        if self.current_view == "queue" and not force:
             self._show_home()
             self._update_player_bar_buttons()
             return
@@ -1392,7 +1397,7 @@ class DabFletApp:
         self.current_view = "queue"
         
         # Use cached view if available and not dirty
-        if self.queue_view_cache and not self.queue_cache_dirty:
+        if self.queue_view_cache and not self.queue_cache_dirty and not force:
             self.viewport.controls.clear()
             self.viewport.controls.extend(self.queue_view_cache)
             self._update_player_bar_buttons()
@@ -1417,46 +1422,79 @@ class DabFletApp:
                 self.queue_cache_dirty = False
                 self.page.update()
             else:
-                # Build track list with remove buttons
-                track_list = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, expand=True)
+                # Build track list with full track cards (same as library)
+                grid = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
                 
-                for i, track in enumerate(self.queue):
+                for i, t in enumerate(self.queue):
                     # Check if currently playing
                     is_current = (i == self.current_track_index)
                     
-                    track_row = ft.Container(
-                        content=ft.Row([
-                            # Track number/playing indicator
-                            ft.Container(
-                                content=ft.Icon(ft.Icons.PLAY_ARROW, color=ft.Colors.GREEN) if is_current else ft.Text(f"{i+1}", size=16),
-                                width=40,
-                                alignment=ft.alignment.center
-                            ),
-                            # Track info
-                            ft.Column([
-                                ft.Text(track.get("title", "Unknown"), weight="bold" if is_current else "normal", size=16, max_lines=1),
-                                ft.Text(track.get("artist", "Unknown"), size=12, color=self._get_secondary_color(), max_lines=1)
-                            ], spacing=2, expand=True),
-                            # Remove button
-                            ft.IconButton(
-                                ft.Icons.CLOSE,
-                                icon_color=ft.Colors.RED_400,
-                                tooltip="Remove from queue",
-                                on_click=lambda _, idx=i: self._remove_from_queue(idx),
-                                icon_size=18
-                            )
-                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        bgcolor=ft.Colors.GREEN_900 if is_current else self.card_bg,
-                        padding=ft.Padding(15, 10, 15, 10),
-                        border_radius=10,
-                        on_click=lambda _, idx=i: self._play_from_queue(idx)
+                    # Cover art
+                    track_img = ft.Container(width=55, height=55, bgcolor="#1A1A1A", border_radius=8)
+                    
+                    # Hi-Res Badge
+                    is_hires = t.get("audioQuality", {}).get("isHiRes", False)
+                    hires_badge = ft.Container(
+                        content=ft.Text("HI-RES", size=9, color=ft.Colors.BLACK, weight="bold"),
+                        bgcolor=ft.Colors.GREEN,
+                        padding=ft.Padding(6, 2, 6, 2),
+                        border_radius=4,
+                        visible=is_hires
                     )
-                    track_list.controls.append(track_row)
+                    
+                    # Menu items (without "Add to Queue" since already in queue)
+                    items = [
+                        ft.PopupMenuItem(content=ft.Text("Add to Library"), on_click=lambda _, trk=t: self._add_to_lib_picker(trk)),
+                        ft.PopupMenuItem(content=ft.Text("Like"), on_click=lambda _, trk=t: self._like_track(trk)),
+                    ]
+                    
+                    menu = ft.PopupMenuButton(
+                        icon=ft.Icons.MORE_VERT,
+                        items=items
+                    )
+                    
+                    row = ft.Container(
+                        content=ft.Row([
+                            track_img,
+                            ft.Column([
+                                ft.Row([
+                                    ft.Text(t.get("title"), weight="bold" if is_current else "normal", size=16, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True),
+                                    hires_badge
+                                ], spacing=10),
+                                ft.Text(t.get("artist"), size=14, color=self._get_secondary_color(), max_lines=1)
+                            ], expand=True, spacing=4),
+                            # Download button or checkmark
+                            self._create_download_button(t),
+                            ft.Row([
+                                # Remove button instead of Add button
+                                ft.IconButton(
+                                    ft.Icons.REMOVE, 
+                                    icon_color=ft.Colors.RED_400, 
+                                    on_click=lambda _, idx=i: self._remove_from_queue(idx), 
+                                    tooltip="Remove from Queue"
+                                ),
+                                ft.IconButton(
+                                    ft.Icons.PLAY_ARROW_ROUNDED, 
+                                    icon_size=30, 
+                                    icon_color=ft.Colors.GREEN, 
+                                    on_click=lambda _, idx=i: self._play_from_queue(idx)
+                                ),
+                                menu
+                            ], spacing=0)
+                        ]),
+                        padding=12,
+                        border_radius=12,
+                        bgcolor=ft.Colors.GREEN_900 if is_current else ft.Colors.TRANSPARENT,
+                        on_hover=lambda e: self._on_track_hover(e)
+                    )
+                    grid.controls.append(row)
+                    if t.get("albumCover"): 
+                        self._load_art(t["albumCover"], track_img)
                 
-                self.viewport.controls.append(track_list)
+                self.viewport.controls.append(grid)
                 
                 # Cache the view
-                self.queue_view_cache = [header, track_list]
+                self.queue_view_cache = [header, grid]
                 self.queue_cache_dirty = False
                 
                 self._update_player_bar_buttons()
@@ -1478,10 +1516,11 @@ class DabFletApp:
                     # If we removed currently playing track, play next
                     self._play_track(self.queue[self.current_track_index])
                 
-                # Mark cache as dirty and rebuild
+                # Mark cache as dirty and rebuild queue view
                 self.queue_cache_dirty = True
                 if self.current_view == "queue":
-                    self._show_queue()
+                    # Rebuild queue view to reflect removal (force refresh without toggle)
+                    self._show_queue(force=True)
                     
                 self._show_banner(f"Removed: {removed_track.get('title', 'track')}", ft.Colors.ORANGE)
         except Exception as e:
@@ -1492,7 +1531,7 @@ class DabFletApp:
         self.queue = []
         self.current_track_index = -1
         self.queue_cache_dirty = True
-        self._show_queue()
+        self._show_queue(force=True)
         self._show_banner("Queue cleared", ft.Colors.ORANGE)
     
     def _play_from_queue(self, index):
@@ -1502,7 +1541,7 @@ class DabFletApp:
             self._play_track(self.queue[index])
             # Rebuild to show new current track
             self.queue_cache_dirty = True
-            self._show_queue()
+            self._show_queue(force=True)
 
     def _prev_track(self):
         if self.current_track_index > 0:
@@ -1556,7 +1595,7 @@ class DabFletApp:
                          self.page.update()
                  self.page.run_thread(_clear_loading)
         
-        threading.Thread(target=_fetch_and_update, daemon=True).start()
+        self._add_future(self.thread_pool.submit(_fetch_and_update))
     
     def _display_library_grid(self, libs):
         """Display library grid from cached or fresh data"""
@@ -1583,7 +1622,7 @@ class DabFletApp:
                 padding=ft.Padding(20, 15, 20, 15),
                 bgcolor=self.card_bg if hasattr(self, 'card_bg') else "#1A1A1A",
                 border_radius=12,
-                on_click=lambda _, l=lib: self._show_remote_lib(l)
+                on_click=lambda _, l=lib: self._safe_navigate(lambda: self._show_remote_lib(l))
             )
             grid.controls.append(lib_row)
         self.viewport.controls.append(grid)
@@ -1693,11 +1732,15 @@ class DabFletApp:
         # Load all tracks using existing stable method
         def _fetch():
             ts = self.api.get_library_tracks(lib.get("id"), page=1, limit=1000)  # Load up to 1000 tracks
-            self.current_lib_tracks = ts  # Cache for refresh
-            def _sync(): 
-                self._display_tracks(ts)
-            self.page.run_thread(_sync)
-        threading.Thread(target=_fetch, daemon=True).start()
+            # Verify we are still on this library before updating UI
+            if self.current_view_lib_id == lib.get("id"):
+                self.current_lib_tracks = ts  # Cache for refresh
+                def _sync(): 
+                    if self.current_view_lib_id == lib.get("id"):
+                        self._display_tracks(ts)
+                self.page.run_thread(_sync)
+        
+        self._add_future(self.thread_pool.submit(_fetch))
         
     def _load_library_page(self, lib_id, page=1):
         if self.is_loading_more:
@@ -1853,7 +1896,7 @@ class DabFletApp:
 
     def _create_download_button(self, track):
         """Create download button, progress indicator, or checkmark for a track"""
-        track_id = track.get("id")
+        track_id = str(track.get("id"))
         is_downloaded = self.download_manager.is_downloaded(track_id)
         is_downloading = self.download_manager.is_downloading(track_id)
         
@@ -1915,10 +1958,14 @@ class DabFletApp:
                                     self.viewport.controls = self.viewport.controls[:1]
                                 self._display_tracks(self.current_lib_tracks)
                                 self.page.update()
+                            elif self.current_view == "queue":
+                                self._show_queue(force=True)
+                            elif self.current_view == "home":
+                                self._show_home()
                         threading.Thread(target=_final_update, daemon=True).start()
                     
                     self.download_manager.download_track(
-                        tid, stream_url, track.get("title"), track.get("artist"),
+                        str(tid), stream_url, track.get("title"), track.get("artist"),
                         progress_callback=_on_progress,
                         completion_callback=_on_complete
                     )
@@ -1975,6 +2022,14 @@ class DabFletApp:
                                 self.viewport.controls.append(ft.Text("Your Collections", size=32, weight="bold"))
                                 self._display_library_grid(self.cached_libraries)
                                 self.page.update()
+                            elif self.current_view == "queue":
+                                # Refresh queue view
+                                print("[Download Refresh] Refreshing queue view")
+                                self._show_queue(force=True)
+                            elif self.current_view == "home":
+                                # Refresh home view
+                                print("[Download Refresh] Refreshing home view")
+                                self._show_home()
                         except Exception as e:
                             print(f"[Download Refresh] Error: {e}")
                     
@@ -2289,17 +2344,24 @@ class DabFletApp:
     def _show_favorites(self):
         if not self.api.user:
             self._show_home()
-            self.page.snack_bar = ft.SnackBar(ft.Text("Please sign in to access your favorites"))
-            self.page.snack_bar.open = True
-            self.page.update()
+            self._show_banner("Please sign in to access your Liked Songs", ft.Colors.RED_400)
             return
+        
+        self.current_view = "favorites"
         self.viewport.controls.clear()
         self.viewport.controls.append(ft.Text("Liked Songs", size=32, weight="bold"))
+        self.page.update()
+        
         def _fetch():
             ts = self.api.get_favorites()
-            def _sync(): self._display_tracks(ts)
-            self.page.run_thread(_sync)
-        threading.Thread(target=_fetch, daemon=True).start()
+            # Verify we are still in favorites view
+            if self.current_view == "favorites":
+                def _sync():
+                    if self.current_view == "favorites":
+                        self._display_tracks(ts)
+                self.page.run_thread(_sync)
+        
+        self._add_future(self.thread_pool.submit(_fetch))
 
     def _open_import(self):
         self.yt_query = ft.TextField(
@@ -2397,10 +2459,25 @@ class DabFletApp:
         self.page.update()
 
     def _like_track(self, track):
-        # Implementation of like logic if available in API
-        self.page.snack_bar = ft.SnackBar(ft.Text("Feature coming soon: Liking tracks"))
-        self.page.snack_bar.open = True
-        self.page.update()
+        def _task():
+            success = self.api.add_favorite(track)
+            if success:
+                self._show_banner(f"Added to Liked Songs: {track.get('title')}")
+            else:
+                self._show_banner("Failed to add to favorites", ft.Colors.RED_400)
+        self.thread_pool.submit(_task)
+
+    def _unlike_track(self, track):
+        def _task():
+            success = self.api.remove_favorite(track.get("id"))
+            if success:
+                self._show_banner(f"Removed from Liked Songs: {track.get('title')}")
+                if self.current_view == "favorites":
+                    # Instant refresh
+                    self.page.run_thread(self._show_favorites)
+            else:
+                self._show_banner("Failed to remove from favorites", ft.Colors.RED_400)
+        self.thread_pool.submit(_task)
 
     def _close_import(self):
         self.import_dlg.open = False
