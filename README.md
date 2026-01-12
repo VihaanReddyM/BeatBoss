@@ -55,9 +55,9 @@ The application is primarily designed for Windows, but can also be built for Lin
 
 ## Configuration
 
-This application requires a YouTube Data API v3 key to function.
+This application needs a YouTube Data API v3 key to import playlist from Youtube Music.
 
-### 1. Add Your API Key
+### 1. Add Your API Key (This part is completely optional)
 
 Open `main_build.py` and replace the placeholder with your actual API key on line 18:
 
