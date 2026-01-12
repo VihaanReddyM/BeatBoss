@@ -229,9 +229,16 @@ class DabFletApp:
         if idx != self.current_lyric_idx and idx != -1:
             self.current_lyric_idx = idx
             def _update_ui():
+                # SAFETY: Only proceed if lyrics view is still active
+                if self.current_view != "lyrics" or not hasattr(self, 'lyrics_scroll'):
+                    return
+                    
                 # Highlight lyric in UI (ALWAYS do this first)
-                if hasattr(self, 'lyrics_scroll') and self.lyrics_scroll and self.lyrics_scroll.controls:
-                    for i, lyric_row in enumerate(self.lyrics_scroll.controls):
+                if self.lyrics_scroll and self.lyrics_scroll.controls:
+                    # Create snapshot to avoid "dictionary changed during iteration"
+                    controls_snapshot = list(self.lyrics_scroll.controls)
+                    
+                    for i, lyric_row in enumerate(controls_snapshot):
                         try:
                             if i == idx:
                                 active_color = ft.Colors.GREEN_700 if self.current_theme == "light" else ft.Colors.GREEN
@@ -291,7 +298,10 @@ class DabFletApp:
                                 self.lyrics_scroll.controls.append(lyric_container)
                         else:
                             # Window same, just update colors (much faster, smoother)
-                            for i, lyric_row in enumerate(self.lyrics_scroll.controls):
+                            # Use snapshot to avoid concurrent modification
+                            for i, lyric_row in enumerate(controls_snapshot):
+                                if i >= len(controls_snapshot):
+                                    break
                                 actual_idx = start_idx + i
                                 if actual_idx == idx:
                                     lyric_row.content.color = ft.Colors.GREEN_700 if self.current_theme == "light" else ft.Colors.GREEN
