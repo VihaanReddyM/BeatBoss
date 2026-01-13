@@ -6,20 +6,8 @@ Uses BackgroundMediaPlayer for desktop app compatibility
 import sys
 import threading
 
-# Windows-specific imports
-if sys.platform == 'win32':
-    try:
-        from winrt.windows.media.playback import MediaPlayer, BackgroundMediaPlayer
-        from winrt.windows.media import SystemMediaTransportControls, MediaPlaybackStatus, SystemMediaTransportControlsButton
-        from winrt.windows.storage.streams import RandomAccessStreamReference
-        from winrt.windows.foundation import Uri
-        SMTC_AVAILABLE = True
-        print("[SMTC] Windows Runtime modules loaded successfully")
-    except ImportError as e:
-        print(f"[SMTC] Windows Runtime not available: {e}")
-        SMTC_AVAILABLE = False
-else:
-    SMTC_AVAILABLE = False
+# Windows-specific imports - LAZY LOADED to improve startup time
+# if sys.platform == 'win32': ... (Moved to inside class)
 
 
 class WindowsMediaControls:
@@ -34,17 +22,30 @@ class WindowsMediaControls:
         self.media_player = None
         self.enabled = False
         
-        if SMTC_AVAILABLE:
-            try:
-                self._initialize_smtc()
-            except Exception as e:
-                print(f"[SMTC] Failed to initialize: {e}")
-                import traceback
-                traceback.print_exc()
+        if sys.platform != 'win32':
+            print("[SMTC] Not on Windows, skipping")
+            return
+
+        # Initialize in a separate thread to not block UI
+        try:
+            self._initialize_smtc()
+        except Exception as e:
+            print(f"[SMTC] Failed to initialize: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _initialize_smtc(self):
         """Initialize Windows SMTC using BackgroundMediaPlayer"""
         try:
+            # Lazy import to prevent blocking startup
+            global SystemMediaTransportControlsButton, MediaPlaybackStatus, RandomAccessStreamReference, Uri
+            from winrt.windows.media.playback import MediaPlayer
+            from winrt.windows.media import SystemMediaTransportControls, MediaPlaybackStatus, SystemMediaTransportControlsButton
+            from winrt.windows.storage.streams import RandomAccessStreamReference
+            from winrt.windows.foundation import Uri
+            
+            print("[SMTC] Windows Runtime modules loaded successfully")
+            
             # Create a MediaPlayer instance for SMTC
             self.media_player = MediaPlayer()
             

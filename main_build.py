@@ -126,9 +126,10 @@ class DabFletApp:
         self._update_theme_colors()
         
         # Performance Optimization: Thread Pools
-        self.thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="worker")
-        self.image_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="image")
+        self.thread_pool = ThreadPoolExecutor(max_workers=32, thread_name_prefix="worker")
+        self.image_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="image")
         self.active_futures = set()  # Track futures to cancel on view change
+        self.futures_lock = threading.Lock() # Fix for "dictionary iteration changed" crash
         
         # Performance: Click guards and debouncing state
         self._view_switching = False
@@ -159,11 +160,18 @@ class DabFletApp:
         self.media_controls.start()
         
         # Windows Media Integration (SMTC)
-        self.windows_media = WindowsMediaControls(
-            on_play_pause=self._toggle_playback,
-            on_next=self._next_track,
-            on_prev=self._prev_track
-        )
+        # Windows Media Integration (SMTC) - Initialize in background to not block startup
+        def _init_smtc():
+            try:
+                self.windows_media = WindowsMediaControls(
+                    on_play_pause=self._toggle_playback,
+                    on_next=self._next_track,
+                    on_prev=self._prev_track
+                )
+            except Exception as e:
+                print(f"SMTC Init Error: {e}")
+
+        threading.Thread(target=_init_smtc, daemon=True).start()
         
         # Start periodic download progress refresh
         self._start_download_refresh_timer()
@@ -552,15 +560,27 @@ class DabFletApp:
 
     def _add_future(self, future):
         """Add a future to tracking and setup auto-removal on completion"""
-        self.active_futures.add(future)
-        future.add_done_callback(lambda f: self.active_futures.discard(f))
+        with self.futures_lock:
+            self.active_futures.add(future)
+        
+        def _cleanup(f):
+            try:
+                with self.futures_lock:
+                    self.active_futures.discard(f)
+            except:
+                pass
+                
+        future.add_done_callback(_cleanup)
 
     def _cancel_pending_operations(self):
         """Cancel all pending futures from previous view"""
-        for future in list(self.active_futures):
+        with self.futures_lock:
+            snapshot = list(self.active_futures)
+            self.active_futures.clear()
+            
+        for future in snapshot:
             if not future.done():
                 future.cancel()
-        self.active_futures.clear()
 
     def _safe_navigate(self, cmd):
         """Standardized navigation wrapper with locking and cleanup"""
@@ -2699,4 +2719,4 @@ def main(page: ft.Page):
     DabFletApp(page)
 
 if __name__ == "__main__":
-    ft.app(main, assets_dir="assets")
+    ft.app(target=main, assets_dir="assets")

@@ -1,12 +1,12 @@
 [Setup]
 ; Basic Information
 AppName=BeatBoss
-AppVersion=1.0
+AppVersion=1.2
 AppPublisher=BeatBoss Team
 
 DefaultDirName={autopf}\BeatBoss
 DefaultGroupName=BeatBoss
-OutputBaseFilename=BeatBoss_Installer
+OutputBaseFilename=BeatBoss_Installer_v1.2
 Compression=lzma2/ultra64
 SolidCompression=yes
 ArchitecturesAllowed=x64
@@ -17,7 +17,7 @@ DisableProgramGroupPage=yes
 LicenseFile=license.txt
 AppSupportURL=https://github.com/TheVolecitor/BeatBoss
 AppUpdatesURL=https://github.com/TheVolecitor/BeatBoss/releases
-VersionInfoVersion=1.0.0.0
+VersionInfoVersion=1.2.0.0
 VersionInfoCompany=BeatBoss Team
 VersionInfoDescription=BeatBoss Desktop Player
 VersionInfoCopyright=Copyright (C) 2026 BeatBoss Team
