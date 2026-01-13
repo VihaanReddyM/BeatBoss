@@ -9,10 +9,11 @@ Unlike Windows, we rely on the system's package manager for media libraries.
 ### Install System Dependencies (Ubuntu/Debian)
 ```bash
 sudo apt update
-sudo apt install -y vlc libvlc-dev ffmpeg python3-pip python3-venv python3-tk
+sudo apt install -y vlc libvlc-dev ffmpeg libmpv-dev libmpv2 python3-pip python3-venv python3-tk
 ```
 *   **vlc / libvlc-dev**: Required for the audio engine.
 *   **ffmpeg**: Required for converting local files (WAV/MP3).
+*   **libmpv-dev**: Required by Flet for its internal video components.
 
 ## 2. Python Environment Setup
 
