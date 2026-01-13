@@ -175,55 +175,24 @@ Once installed, you can find "BeatBoss" in your **System Menu** and pin it to yo
 
 ### 5. Packaging as AppImage
 
+For a single-file portable executable that works on most Linux distros (no installation required):
 
-For a single-file portable executable that works on most Linux distros:
-
-1.  **Download appimagetool**:
+1.  **Build the app first:**
     ```bash
-    wget https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
-    chmod +x appimagetool-x86_64.AppImage
+    ./bundle_linux_vlc.sh
+    python3 -m PyInstaller beatboss_linux.spec
     ```
 
-2.  **Create AppDir Structure**:
+2.  **Run the AppImage Builder script:**
     ```bash
-    mkdir -p BeatBoss.AppDir/usr/bin
-    cp -r dist/BeatBoss/* BeatBoss.AppDir/usr/bin/
-    # IMPORTANT: Icon must be named exactly 'beatboss.png' to match the desktop file
-    cp assets/logo.png BeatBoss.AppDir/beatboss.png
+    chmod +x build_appimage.sh
+    ./build_appimage.sh
     ```
 
-3.  **Create `BeatBoss.desktop`**:
-    Save this in `BeatBoss.AppDir/beatboss.desktop`:
-    ```ini
-    [Desktop Entry]
-    Name=BeatBoss
-    Exec=AppRun
-    Icon=beatboss
-    Type=Application
-    Categories=AudioVideo;Audio;Music;
-    Comment=BeatBoss Music Player
-    Terminal=false
-    ```
-
-4.  **Create `AppRun`**:
-    Save this in `BeatBoss.AppDir/AppRun`:
+3.  **Run it:**
+    You will get `BeatBoss-x86_64.AppImage`.
     ```bash
-    #!/bin/sh
-    SELF=$(readlink -f "$0")
-    HERE=${SELF%/*}
-    export PATH="${HERE}/usr/bin:${PATH}"
-    export LD_LIBRARY_PATH="${HERE}/usr/bin:${LD_LIBRARY_PATH}"
-    export FLET_VIEW_PATH="${HERE}/usr/bin"
-    exec "${HERE}/usr/bin/BeatBoss" "$@"
-    ```
-    Make it executable:
-    ```bash
-    chmod +x BeatBoss.AppDir/AppRun
-    ```
-
-5.  **Build It**:
-    ```bash
-    # Verify strict mode is off to avoid minor validation errors
-    ARCH=x86_64 ./appimagetool-x86_64.AppImage BeatBoss.AppDir
+    chmod +x BeatBoss-x86_64.AppImage
+    ./BeatBoss-x86_64.AppImage
     ```
 
