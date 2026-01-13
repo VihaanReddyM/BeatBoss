@@ -56,9 +56,15 @@ class AudioPlayer:
         self.on_track_end = None
         
         # Event Manager
-        self.events = self.player.event_manager()
-        self.events.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_vlc_end)
-        self.events.event_attach(vlc.EventType.MediaPlayerEncounteredError, self._on_vlc_error)
+        self.events = None
+        if self.player:
+            try:
+                self.events = self.player.event_manager()
+                self.events.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_vlc_end)
+                self.events.event_attach(vlc.EventType.MediaPlayerEncounteredError, self._on_vlc_error)
+            except Exception as e:
+                print(f"[Player] Error attaching events: {e}")
+                self.events = None
         
         self.running = True
         self.on_error = None
@@ -173,11 +179,15 @@ class AudioPlayer:
                 self._cleanup_temp()
                 
                 # Use VLC for streaming or fallback
-                print(f"[VLC] Loading: {url[:60]}...")
-                media = self.instance.media_new(url)
-                self.player.set_media(media)
-                self.player.audio_set_volume(self._volume)
-                self.player.play()
+                if self.instance and self.player:
+                    print(f"[VLC] Loading: {url[:60]}...")
+                    media = self.instance.media_new(url)
+                    self.player.set_media(media)
+                    self.player.audio_set_volume(self._volume)
+                    self.player.play()
+                else:
+                    print("[Player] Error: VLC not initialized")
+                    return
                 
                 time.sleep(0.3)
                 self.current_track = track_info
