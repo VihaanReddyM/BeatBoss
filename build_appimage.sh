@@ -18,10 +18,24 @@ echo "🏗️  Preparing AppDir..."
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/usr/bin"
 
-# Copy binary and assets
-echo "📦 Copying files..."
 cp -r "$SOURCE_BIN"/* "$BUILD_DIR/usr/bin/"
 cp assets/logo.png "$BUILD_DIR/beatboss.png"
+
+# CRITICAL FIX: Find the 'flet' binary buried in _internal and copy it to /usr/bin.
+# Flet expects 'flet' to be in the PATH.
+echo "🔍 Searching for flet binary..."
+# Find file named 'flet', executable, inside _internal
+FLET_BIN=$(find "$BUILD_DIR/usr/bin" -type f -name "flet" | head -n 1)
+
+if [ -n "$FLET_BIN" ]; then
+    echo "✅ Found Flet binary at: $FLET_BIN"
+    cp "$FLET_BIN" "$BUILD_DIR/usr/bin/flet"
+    chmod +x "$BUILD_DIR/usr/bin/flet"
+    echo "✅ Copied to $BUILD_DIR/usr/bin/flet"
+else
+    echo "❌ ERROR: Could not find 'flet' binary! The AppImage will likely crash."
+    echo "   Ensure 'flet' is installed in your venv and bundled by PyInstaller."
+fi
 
 # Download AppImageTool if missing
 if [ ! -f "appimagetool-x86_64.AppImage" ]; then
