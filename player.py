@@ -17,9 +17,27 @@ def _setup_vlc_path():
         os.environ['PATH'] = bundled_vlc + os.pathsep + os.environ.get('PATH', '')
         print(f"[VLC] Using bundled VLC: {bundled_vlc}")
         return bundled_vlc
-    else:
-        print("[VLC] Using system VLC")
-        return None
+    
+    # Linux-specific: PyInstaller can mess up library discovery, so we explicitly look for it
+    if sys.platform.startswith('linux'):
+        # Check potential locations for libvlc.so
+        possible_paths = [
+            os.path.join(app_dir, 'libvlc.so'),                         # Bundled in app root
+            os.path.join(app_dir, '_internal', 'libvlc.so'),            # PyInstaller _internal
+            os.path.join(sys.prefix, 'lib', 'libvlc.so'),               # Venv/System
+            '/usr/lib/x86_64-linux-gnu/libvlc.so',                      # Debian/Ubuntu/Kali
+            '/usr/lib/libvlc.so',                                       # Arch/Fedora
+            '/usr/lib64/libvlc.so'                                      # OpenSUSE
+        ]
+        
+        for p in possible_paths:
+            if os.path.exists(p):
+                os.environ['PYTHON_VLC_LIB_PATH'] = p
+                print(f"[VLC] Linux: Found and set libvlc at {p}")
+                return p
+
+    print("[VLC] Using system VLC (PATH search)")
+    return None
 
 _setup_vlc_path()
 
