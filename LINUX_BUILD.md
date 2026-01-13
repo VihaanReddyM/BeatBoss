@@ -1,52 +1,56 @@
-# Linux Build Guide
+# Linux Build Guide & Setup
 
-This guide explains how to package BeatBoss as a standalone executable for Linux.
+This guide explains how to set up the development environment and package BeatBoss as a standalone executable for Linux.
 
-## Requirements
+## 1. System Requirements
 
-You must perform these steps on a Linux machine (Ubuntu/Debian recommended).
+Unlike Windows, we rely on the system's package manager for media libraries.
 
-### 1. System Dependencies
-Install the required system libraries for VLC and Python development:
-
+### Install System Dependencies (Ubuntu/Debian)
 ```bash
 sudo apt update
-sudo apt install -y vlc libvlc-dev ffmpeg python3-pip python3-venv
+sudo apt install -y vlc libvlc-dev ffmpeg python3-pip python3-venv python3-tk
 ```
+*   **vlc / libvlc-dev**: Required for the audio engine.
+*   **ffmpeg**: Required for converting local files (WAV/MP3).
 
-### 2. Python Environment
-Set up your virtual environment and install dependencies:
+## 2. Python Environment Setup
+
+Set up your virtual environment and install project dependencies.
 
 ```bash
+# 1. Create virtual environment
 python3 -m venv venv
+
+# 2. Activate it
 source venv/bin/activate
-pip install flet python-vlc requests python-dotenv
+
+# 3. Install requirements
+# Note: This will automatically skip Windows-only packages (winrt)
+pip install -r requirements.txt
 ```
-*Note: Do not install `winrt` packages on Linux.*
 
-## Building with PyInstaller
-
-We can use PyInstaller to create a single-folder or single-file executable.
-
-### 1. Simple Build
-Run the following command in the project root:
-
+### Running the App Locally
 ```bash
-pyinstaller --noconfirm --onedir --windowed \
-    --add-data "assets:assets" \
-    --name "BeatBoss" \
-    main_flet.py
+python3 main_build.py
 ```
 
-### 2. Using the Spec File
-Since you have a Windows `.spec` file, you can create a simplified version for Linux (`beatboss_linux.spec`):
+---
+
+## 3. Building for Distribution (PyInstaller)
+
+We use PyInstaller to create a standalone binary.
+
+### Create the Linux Spec File (`beatboss_linux.spec`)
+
+Save the following content as `beatboss_linux.spec` in the project root:
 
 ```python
 # beatboss_linux.spec
 # -*- mode: python ; coding: utf-8 -*-
 
 a = Analysis(
-    ['main_flet.py'],
+    ['main_build.py'],
     pathex=[],
     binaries=[],
     datas=[('assets', 'assets')],
@@ -54,7 +58,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['winrt'], # Exclude Windows-specific modules
+    excludes=['winrt', 'winrt.windows.media', 'windows_media'], # Exclude Windows modules
     noarchive=False,
 )
 pyz = PYZ(a.pure)
@@ -69,18 +73,17 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,
+    console=False, # Set to True if you want to see debug logs in terminal
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets/icon.png'], # Use PNG for Linux
+    icon=['assets/logo.png'], # Use PNG for Linux
 )
 coll = COLLECT(
     exe,
     a.binaries,
-    a.zipfiles,
     a.datas,
     strip=False,
     upx=True,
@@ -89,23 +92,19 @@ coll = COLLECT(
 )
 ```
 
-Build it using:
+### Build the Application
 ```bash
 pyinstaller beatboss_linux.spec
 ```
 
-## Distribution (AppImage)
+The output will be in `dist/BeatBoss/BeatBoss`.
 
-The easiest way to share the app on Linux is an **AppImage**.
+## 4. Packaging as AppImage (Optional)
 
-1. Download `appimagetool` from the AppImage GitHub.
-2. Structure your folder:
-   - `BeatBoss.AppDir/`
-     - `usr/bin/` (put your compiled binary here)
-     - `BeatBoss.desktop`
-     - `icon.png`
-     - `AppRun` (entry script)
-3. Run `appimagetool BeatBoss.AppDir`.
+For a single-file portable executable that works on most Linux distros:
 
-## Limitations
-*   System Media Controls: SMTC is Windows-only. On Linux, the app will function normally but won't show in the system volume mixer's media controls unless a Linux-specific library (like `mpris2`) is added later.
+1.  Download **appimagetool** from GitHub.
+2.  Create directory `BeatBoss.AppDir`.
+3.  Copy directory `dist/BeatBoss` to `BeatBoss.AppDir/usr/bin`.
+4.  Create `BeatBoss.desktop` and `AppRun` script.
+5.  Run `appimagetool BeatBoss.AppDir`.
