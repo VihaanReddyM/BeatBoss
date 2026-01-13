@@ -20,7 +20,29 @@ def _setup_vlc_path():
     
     # Linux-specific: PyInstaller can mess up library discovery, so we explicitly look for it
     if sys.platform.startswith('linux'):
-        # Check potential locations for libvlc.so
+        # 1. Check for bundled 'vlc_libs' (Manual bundle)
+        # Structure: vlc_libs/lib/libvlc.so and vlc_libs/plugins/...
+        bundled_linux = os.path.join(app_dir, 'vlc_libs')
+        if os.path.exists(bundled_linux):
+            lib_path = os.path.join(bundled_linux, 'lib', 'libvlc.so')
+            plugin_path = os.path.join(bundled_linux, 'plugins')
+            
+            # Try specific versioned name if generic symlink doesn't exist
+            if not os.path.exists(lib_path):
+                # Search for libvlc.so.5 or similar
+                import glob
+                libs = glob.glob(os.path.join(bundled_linux, 'lib', 'libvlc.so.*'))
+                if libs:
+                    lib_path = libs[0]
+
+            if os.path.exists(lib_path):
+                os.environ['PYTHON_VLC_LIB_PATH'] = lib_path
+                os.environ['VLC_PLUGIN_PATH'] = plugin_path
+                print(f"[VLC] Linux: Using bundled binaries at {lib_path}")
+                print(f"[VLC] Linux: Plugins set to {plugin_path}")
+                return lib_path
+
+        # 2. Check individual paths (libraries only, system plugins)
         possible_paths = [
             os.path.join(app_dir, 'libvlc.so'),                         # Bundled in app root
             os.path.join(app_dir, '_internal', 'libvlc.so'),            # PyInstaller _internal
