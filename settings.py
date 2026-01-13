@@ -57,7 +57,14 @@ class Settings:
             "downloaded_tracks": {}  # {track_id: {"path": str, "title": str, "artist": str}}
         }
         self._ensure_download_dir(default_settings['download_location'])
-        self.save()
+        
+        # Manually save since self.settings isn't set yet, prevents AttributeError
+        try:
+            with open(self.settings_file, 'w', encoding='utf-8') as f:
+                json.dump(default_settings, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Error saving default settings: {e}")
+            
         return default_settings
     
     def _ensure_download_dir(self, download_path: Optional[str]):

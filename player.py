@@ -31,8 +31,20 @@ import tempfile
 
 class AudioPlayer:
     def __init__(self):
-        self.instance = vlc.Instance("--no-xlib", "--quiet", "--no-video", "--aout=directx")
-        self.player = self.instance.media_player_new()
+        vlc_args = ["--no-xlib", "--quiet", "--no-video"]
+        if sys.platform == 'win32':
+            vlc_args.append("--aout=directx")
+        
+        self.instance = vlc.Instance(*vlc_args)
+        if not self.instance:
+            print("[Player] CRITICAL: Could not create VLC instance. Is libvlc installed?")
+            self.player = None
+        else:
+            try:
+                self.player = self.instance.media_player_new()
+            except Exception as e:
+                print(f"[Player] Error creating media player: {e}")
+                self.player = None
         self.current_track = None
         self.is_playing = False
         self._volume = 80
